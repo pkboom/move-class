@@ -1,6 +1,6 @@
 # Move classes
 
-If you move classes to another namespace, so you have to change a namespace manually. If you use `phpstorm`, you can do this easily. But if you use `vscode` like me, you have to do it all manually. This package can help you with that, changing `namespaces` accordingly.
+If you move classes to another namespace, you have to change a namespace. If you use `phpstorm`, you can do this easily. But if you use `vscode` like me, you have to do it all manually. This package can help you with that, changing `namespaces` accordingly.
 
 ## Installation
 
