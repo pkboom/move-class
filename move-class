@@ -1,0 +1,20 @@
+#!/usr/bin/env php
+
+<?php
+
+use Pkboom\MoveClass\MoveClassCommand;
+use Symfony\Component\Console\Application;
+
+if (file_exists(__DIR__.'/vendor/autoload.php')) {
+    require __DIR__.'/vendor/autoload.php';
+} else {
+    require __DIR__.'/../../autoload.php';
+}
+
+$application = new Application('Move Class', '1.0.0');
+
+$application->add($command = new MoveClassCommand());
+
+$application->setDefaultCommand($command->getName());
+
+$application->run();
