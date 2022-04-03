@@ -2,7 +2,6 @@
 
 namespace Pkboom\MoveClass;
 
-use RuntimeException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -11,6 +10,8 @@ use Symfony\Component\Finder\Finder;
 
 class MoveClassCommand extends Command
 {
+    private $results = [];
+
     protected $laravelDirs = [
         'resources/views',
         'routes',
@@ -26,25 +27,15 @@ class MoveClassCommand extends Command
     {
         $output = new SymfonyStyle($input, $output);
 
-        $results = $this->replaceNamespaceAndUse();
+        $this->replaceNamespaceAndUse();
 
-        if (empty($results)) {
+        if (empty($this->results)) {
             $output->text('Nothing changed.');
 
             return static::SUCCESS;
         }
 
-        $output->title('Namespace');
-
-        foreach ($results['namespace'] ?? [] as $oldNamespace => $newNamespace) {
-            $output->text($oldNamespace.' => '.$newNamespace);
-        }
-
-        $output->title('Use');
-
-        foreach ($results['use'] ?? [] as $oldUse => $newUse) {
-            $output->text($oldUse.' => '.$newUse);
-        }
+        $this->displayResults($output);
 
         $output->newLine();
 
@@ -53,60 +44,21 @@ class MoveClassCommand extends Command
         return static::SUCCESS;
     }
 
-    public function getNamespaces()
-    {
-        $composer = json_decode(file_get_contents($this->basePath('composer.json')), true);
-
-        $autoloads = [$composer['autoload-dev']['psr-4'] ?? [], $composer['autoload']['psr-4'] ?? []];
-
-        $namespaces = array_filter(array_merge($autoloads[0], $autoloads[1]));
-
-        if (empty($namespaces)) {
-            throw new RuntimeException('Unable to detect application namespace.');
-        }
-
-        $result = [];
-
-        foreach ($namespaces as $namespace => $dir) {
-            $result[trim($namespace, '\\')] = $this->basePath(trim($dir, '/'));
-        }
-
-        return $result;
-    }
-
-    public function basePath($path = '')
-    {
-        return getcwd().($path !== '' ? DIRECTORY_SEPARATOR.$path : '');
-    }
-
-    public function replaceUse($files, $oldUse, $newUse)
-    {
-        foreach ($files as $value) {
-            $content = file_get_contents($value->getRealPath());
-
-            $content = str_replace('use '.$oldUse, 'use '.$newUse, $content);
-
-            file_put_contents($value->getRealPath(), $content);
-        }
-    }
-
     public function replaceNamespaceAndUse()
     {
-        $results = [];
-
-        foreach ($this->getNamespaces() as $namespace => $dir) {
+        foreach (Composer::getNamespaces($this->basePath('composer.json')) as $namespace => $dir) {
             $files = Finder::create()->in($dir)->files()->name('*.php')->ignoreDotFiles(true);
 
             foreach ($files as $file) {
-                $content = file_get_contents($file->getRealPath());
+                $content = Content::create($file->getRealPath());
 
-                preg_match('/namespace\s+([\w\\\]+);/', $content, $match);
+                $this->replaceClassName($content, $file);
 
-                if (empty($match)) {
+                if (empty($match = $content->namespace())) {
                     continue;
                 }
 
-                $namespaceFromFile = str_replace($namespace, '', $match[1]);
+                $namespaceFromFile = str_replace($namespace, '', $match);
 
                 $namespaceFromPath = str_replace('/', '\\', str_replace($dir, '', $file->getPath()));
 
@@ -120,11 +72,9 @@ class MoveClassCommand extends Command
 
                 $newNamespace = $namespace.'\\'.implode('\\', $namespacePieces);
 
-                $content = str_replace('namespace '.$match[1], 'namespace '.$newNamespace, $content);
+                $content->replaceNamespaceWith($newNamespace);
 
-                file_put_contents($file->getRealPath(), $content);
-
-                $results['namespace'][$match[1]] = $newNamespace;
+                $this->results['namespace'][] = "$match => $newNamespace";
 
                 $newUse = $newNamespace.'\\'.str_replace('.php', '', $file->getBasename());
 
@@ -140,10 +90,46 @@ class MoveClassCommand extends Command
                     }
                 }
 
-                $results['use'][$oldUse] = $newUse;
+                $this->results['use'][] = "$oldUse => $newUse";
             }
         }
+    }
 
-        return $results;
+    public function replaceUse($files, $oldUse, $newUse)
+    {
+        foreach ($files as $file) {
+            $content = Content::create($file->getRealPath());
+
+            $content->replaceUse($oldUse, $newUse);
+        }
+    }
+
+    public function basePath($path = '')
+    {
+        return getcwd().($path !== '' ? DIRECTORY_SEPARATOR.$path : '');
+    }
+
+    public function replaceClassName($content, $file)
+    {
+        $className = $content->className();
+
+        $filename = str_replace('.php', '', $file->getBasename());
+
+        if (isset($className) && $filename !== $className) {
+            $content->replaceClassNameWith($filename);
+
+            $this->results['class'][] = "$className => $filename";
+        }
+    }
+
+    public function displayResults($output)
+    {
+        foreach ($this->results as $key => $result) {
+            $output->title(ucfirst($key));
+
+            foreach ($result ?? [] as $change) {
+                $output->text($change);
+            }
+        }
     }
 }
