@@ -109,13 +109,13 @@ class MoveClassCommand extends Command
         return getcwd().($path !== '' ? DIRECTORY_SEPARATOR.$path : '');
     }
 
-    public function replaceClassName($content, $file)
+    public function replaceClassName(Content $content, $file)
     {
         $className = $content->className();
 
         $filename = str_replace('.php', '', $file->getBasename());
 
-        if (isset($className) && $filename !== $className) {
+        if (! empty($className) && $filename !== $className) {
             $content->replaceClassNameWith($filename);
 
             $this->results['class'][] = "$className => $filename";
